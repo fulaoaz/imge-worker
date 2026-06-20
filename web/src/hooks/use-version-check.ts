@@ -3,8 +3,8 @@ import { App } from "antd";
 import { APP_VERSION } from "@/constant/env";
 import { parseChangelog, type ReleaseInfo } from "@/lib/release";
 
-const latestVersionUrl = "https://raw.githubusercontent.com/fulaoaz/imge-worker/main/VERSION";
-const latestChangelogUrl = "https://raw.githubusercontent.com/fulaoaz/imge-worker/main/CHANGELOG.md";
+const latestVersionUrl = "https://raw.githubusercontent.com/fulaoaz/image-worker/main/VERSION";
+const latestChangelogUrl = "https://raw.githubusercontent.com/fulaoaz/image-worker/main/CHANGELOG.md";
 
 function readLocalReleases(): ReleaseInfo[] {
     try {

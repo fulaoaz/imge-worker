@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: imge-worker
+    name: image-worker
     runtime: docker
     plan: free
     autoDeployTrigger: off

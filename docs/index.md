@@ -1,4 +1,4 @@
-# Imge Worker文档索引
+# Image Worker文档索引
 
 ## 项目介绍
 

@@ -1,6 +1,6 @@
 services:
   app:
-    image: imge-worker:local
+    image: image-worker:local
     build:
       context: .
       dockerfile: Dockerfile

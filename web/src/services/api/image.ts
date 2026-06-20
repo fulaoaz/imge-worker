@@ -710,6 +710,66 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
     }
 }
 
+export async function requestEditableSvgConversion(config: AiConfig, image: ReferenceImage, meta: { width: number; height: number; title?: string }, options?: RequestOptions) {
+    const requestConfig = { ...resolveModelRequestConfig(config, config.model || config.textModel || config.imageModel), systemPrompt: "" };
+    const prompt = buildEditableSvgPrompt(meta);
+    const messages: ResponseInputMessage[] = [
+        {
+            role: "user",
+            content: [
+                { type: "text", text: prompt },
+                { type: "image_url", image_url: { url: image.dataUrl } },
+            ],
+        },
+    ];
+
+    try {
+        const result =
+            requestConfig.apiFormat === "gemini"
+                ? await requestGeminiStreamingResponse(requestConfig, toGeminiBody(requestConfig, messages, { generationConfig: { maxOutputTokens: 16000 } }), undefined, options)
+                : await requestStreamingResponse(
+                      requestConfig,
+                      {
+                          model: requestConfig.model,
+                          input: toResponseInput(messages),
+                          max_output_tokens: 16000,
+                      },
+                      undefined,
+                      options,
+                  );
+        return extractSvgMarkup(result.content || "");
+    } catch (error) {
+        throw new Error(readAxiosError(error, "转成可编辑 SVG 失败"));
+    }
+}
+
+function buildEditableSvgPrompt(meta: { width: number; height: number; title?: string }) {
+    const width = Math.max(1, Math.round(meta.width || 1024));
+    const height = Math.max(1, Math.round(meta.height || 1024));
+    const title = meta.title?.trim() || "Editable image";
+    return `请把这张图片重建为可编辑的语义 SVG，而不是把像素点铺成马赛克矩形。目标是让用户后续可以在网页里点选、拖动和修改每一个图形/文字对象。
+
+要求：
+1. 只返回一个完整的 <svg>...</svg>，不要 Markdown 代码块、解释或额外文字。
+2. SVG 必须设置 xmlns、width="${width}"、height="${height}"、viewBox="0 0 ${width} ${height}"。
+3. 尽量把画面拆成语义元素：<text> 用于所有可见文字，<path>/<rect>/<circle>/<ellipse>/<line>/<polyline>/<polygon> 用于图形、箭头、连线、图标和区域。
+4. 不要使用 <image>、base64 位图、foreignObject、script 或外部资源。不能把原图嵌进去。
+5. 对流程图、机制图、信息图，保留标题、标签、箭头方向、连线关系和主要颜色；文字不确定时也要尽量按图片内容 OCR/近似转写。
+6. 相近图形可用 <g> 分组，但每个重要图形和每段文字都要保持为单独可选元素。
+7. 使用简洁样式，允许近似，不追求像素级完全一致；优先保证对象可编辑、可拖动、文字可修改。
+
+标题：${title}`;
+}
+
+function extractSvgMarkup(text: string) {
+    const fenced = text.match(/```(?:svg|xml)?\s*([\s\S]*?<svg[\s\S]*?<\/svg>)\s*```/i)?.[1];
+    const source = fenced || text;
+    const start = source.search(/<svg[\s>]/i);
+    const end = source.toLowerCase().lastIndexOf("</svg>");
+    if (start < 0 || end < start) throw new Error("模型没有返回可编辑 SVG，请换用支持视觉理解的模型后重试");
+    return source.slice(start, end + "</svg>".length).trim();
+}
+
 export async function requestToolResponse(config: AiConfig, messages: ResponseInputMessage[], tools: ResponseFunctionTool[], toolChoice: ToolChoice = "auto", onDelta?: (text: string) => void, options?: RequestOptions): Promise<ToolResponseResult> {
     const requestConfig = resolveModelRequestConfig(config, config.model || config.textModel);
     try {

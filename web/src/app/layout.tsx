@@ -7,8 +7,8 @@ import "./globals.css";
 import React from "react";
 
 export const metadata: Metadata = {
-    title: "Imge Worker",
-    description: "一个Imge Worker创作工具",
+    title: "Image Worker",
+    description: "一个Image Worker创作工具",
 };
 
 export default function RootLayout({

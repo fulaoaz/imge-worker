@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { BookOpen, Bot, Home, ImageIcon, Images, List, Menu, Music2, Plus, Redo2, Settings2, Trash2, Undo2, Upload, Video } from "lucide-react";
 import { saveAs } from "file-saver";
 
-import { requestEdit, requestGeneration, requestImageQuestion } from "@/services/api/image";
+import { requestEdit, requestEditableSvgConversion, requestGeneration, requestImageQuestion } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { requestVideoGeneration, storeGeneratedVideo } from "@/services/api/video";
 import { DOCS_URL } from "@/constant/env";
@@ -20,7 +20,7 @@ import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
-import { rasterImageToEditableSvg, sanitizeEditableSvg, svgToBlob } from "../utils/canvas-svg-vector";
+import { semanticSvgFallback, sanitizeEditableSvg, svgToBlob } from "../utils/canvas-svg-vector";
 import { fitNodeSize, nodeSizeFromRatio } from "../utils/canvas-node-size";
 import { App, Button, Dropdown, Modal } from "antd";
 import { NODE_DEFAULT_SIZE, getNodeSpec } from "../constants";
@@ -1020,7 +1020,7 @@ function InfiniteCanvasPage() {
     }, [applyHistory]);
 
     const createAndOpenProject = useCallback(() => {
-        const id = createProject(`Imge Worker ${useCanvasStore.getState().projects.length + 1}`);
+        const id = createProject(`Image Worker ${useCanvasStore.getState().projects.length + 1}`);
         router.push(`/canvas/${id}`);
     }, [createProject, router]);
 
@@ -1627,11 +1627,24 @@ function InfiniteCanvasPage() {
                 message.warning("图片节点为空，无法转成可编辑");
                 return;
             }
-            const key = "vectorize-image";
-            message.loading({ key, content: "正在转成可编辑 SVG...", duration: 0 });
+            const generationConfig = { ...buildGenerationConfig(effectiveConfig, node, "text"), count: "1" };
+            if (!isAiConfigReady(generationConfig, generationConfig.model)) {
+                openConfigDialog(true);
+                return;
+            }
+            const key = "semantic-vectorize-image";
+            message.loading({ key, content: "正在用模型重建可拖拽 SVG 对象...", duration: 0 });
+            const controller = startGenerationRequest(node.id, node.id, node.id);
             try {
-                const result = await rasterImageToEditableSvg(node.metadata.content, { title: node.title || "Editable image" });
-                const image = await uploadImage(svgToBlob(result.svg));
+                const source = { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey };
+                const rawSvg = await requestEditableSvgConversion(
+                    generationConfig,
+                    source,
+                    { width: node.metadata.naturalWidth || node.width, height: node.metadata.naturalHeight || node.height, title: node.title || "Editable image" },
+                    { signal: controller.signal },
+                );
+                const cleanSvg = sanitizeEditableSvg(rawSvg);
+                const image = await uploadImage(svgToBlob(cleanSvg));
                 const width = Math.min(node.width, Math.max(220, image.width));
                 const childId = nanoid();
                 const child: CanvasNodeData = {
@@ -1644,10 +1657,8 @@ function InfiniteCanvasPage() {
                     metadata: {
                         ...imageMetadata(image),
                         prompt: node.metadata.prompt,
-                        editableSvg: result.svg,
+                        editableSvg: cleanSvg,
                         editableSourceNodeId: node.id,
-                        vectorSampledWidth: result.sampledWidth,
-                        vectorSampledHeight: result.sampledHeight,
                         freeResize: false,
                     },
                 };
@@ -1656,12 +1667,43 @@ function InfiniteCanvasPage() {
                 setSelectedNodeIds(new Set([childId]));
                 setSvgEditNodeId(childId);
                 setDialogNodeId(null);
-                message.success({ key, content: "已转成可编辑 SVG", duration: 2 });
+                message.success({ key, content: "已重建为可拖拽 SVG 对象", duration: 2 });
             } catch (error) {
-                message.error({ key, content: error instanceof Error ? error.message : "转成可编辑失败", duration: 3 });
+                if (isGenerationCanceled(error)) return;
+                const fallbackSvg = semanticSvgFallback({ width: node.metadata.naturalWidth || node.width, height: node.metadata.naturalHeight || node.height, title: node.title || "Editable image" });
+                try {
+                    const image = await uploadImage(svgToBlob(fallbackSvg));
+                    const width = Math.min(node.width, Math.max(220, image.width));
+                    const childId = nanoid();
+                    const child: CanvasNodeData = {
+                        id: childId,
+                        type: CanvasNodeType.Image,
+                        title: `${node.title || "图片"} 可编辑`,
+                        position: { x: node.position.x + node.width + 96, y: node.position.y },
+                        width,
+                        height: width * (image.height / image.width),
+                        metadata: {
+                            ...imageMetadata(image),
+                            prompt: node.metadata.prompt,
+                            editableSvg: fallbackSvg,
+                            editableSourceNodeId: node.id,
+                            errorDetails: error instanceof Error ? error.message : "语义 SVG 重建失败",
+                            freeResize: false,
+                        },
+                    };
+                    setNodes((prev) => [...prev, child]);
+                    setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
+                    setSelectedNodeIds(new Set([childId]));
+                    setSvgEditNodeId(childId);
+                } catch {
+                    // Keep the original error below.
+                }
+                message.error({ key, content: error instanceof Error ? error.message : "转成可编辑失败", duration: 4 });
+            } finally {
+                finishGenerationRequest(node.id, controller);
             }
         },
-        [message],
+        [effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, startGenerationRequest],
     );
 
     const openSvgEditor = useCallback(

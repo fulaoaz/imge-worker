@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_NAME="${IMAGE_NAME:-imge-worker:local}"
-ARCHIVE_PATH="${ARCHIVE_PATH:-dist/imge-worker-image.tar.gz}"
+IMAGE_NAME="${IMAGE_NAME:-image-worker:local}"
+ARCHIVE_PATH="${ARCHIVE_PATH:-dist/image-worker-image.tar.gz}"
 
 mkdir -p "$(dirname "$ARCHIVE_PATH")"
 

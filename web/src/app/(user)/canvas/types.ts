@@ -58,8 +58,6 @@ export type CanvasNodeMetadata = {
     durationMs?: number;
     editableSvg?: string;
     editableSourceNodeId?: string;
-    vectorSampledWidth?: number;
-    vectorSampledHeight?: number;
 };
 
 export type CanvasNodeData = {

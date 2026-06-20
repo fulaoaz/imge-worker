@@ -1,7 +1,7 @@
 services:
   app:
-    image: ghcr.io/fulaoaz/imge-worker:latest
-    container_name: imge-worker
+    image: ghcr.io/fulaoaz/image-worker:latest
+    container_name: image-worker
     ports:
       - "3000:3000"
     env_file:

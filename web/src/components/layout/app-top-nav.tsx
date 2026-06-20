@@ -32,7 +32,7 @@ export function AppTopNav() {
                                         WebkitMask: "url(/logo.svg) center / contain no-repeat",
                                     }}
                                 />
-                                <span className="text-base font-medium">Imge Worker</span>
+                                <span className="text-base font-medium">Image Worker</span>
                             </Link>
 
                             <button
