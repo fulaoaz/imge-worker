@@ -110,6 +110,24 @@ export async function upscaleDataUrl(dataUrl: string, params: ImageUpscaleParams
     return params.algorithm === "high" ? drawStepUpscale(image, width, height) : drawResize(image, image.width, image.height, width, height, params.algorithm);
 }
 
+export async function fitImageDataUrlForRequest(dataUrl: string, maxLongEdge = 1536, maxBytes = 8 * 1024 * 1024) {
+    const image = await loadImage(dataUrl);
+    const originalBytes = dataUrlByteSize(dataUrl);
+    if (Math.max(image.width, image.height) <= maxLongEdge && originalBytes <= maxBytes) return dataUrl;
+
+    let longEdge = Math.min(maxLongEdge, Math.max(image.width, image.height));
+    let fallback = dataUrl;
+    while (longEdge >= 640) {
+        const { width, height } = resolveUpscaleSize(image.width, image.height, longEdge);
+        for (const quality of [0.86, 0.76, 0.66, 0.56]) {
+            fallback = drawJpegResize(image, image.width, image.height, width, height, quality);
+            if (dataUrlByteSize(fallback) <= maxBytes) return fallback;
+        }
+        longEdge = Math.floor(longEdge * 0.75);
+    }
+    return fallback;
+}
+
 export function resolveUpscaleSize(width: number, height: number, targetLongEdge: number) {
     const longEdge = Math.max(1, width, height);
     const target = Math.min(MAX_UPSCALE_LONG_EDGE, Math.max(1, Math.round(targetLongEdge)));
@@ -146,6 +164,18 @@ function drawStepUpscale(image: HTMLImageElement, width: number, height: number)
 
 function drawResize(source: CanvasImageSource, sourceWidth: number, sourceHeight: number, width: number, height: number, algorithm: ImageUpscaleAlgorithm) {
     return drawResizeCanvas(source, sourceWidth, sourceHeight, width, height, algorithm).toDataURL("image/png");
+}
+
+function drawJpegResize(source: CanvasImageSource, sourceWidth: number, sourceHeight: number, width: number, height: number, quality: number) {
+    return drawResizeCanvas(source, sourceWidth, sourceHeight, width, height, "high").toDataURL("image/jpeg", quality);
+}
+
+function dataUrlByteSize(dataUrl: string) {
+    const payload = dataUrl.split(",", 2)[1] || "";
+    if (!payload) return 0;
+    if (!dataUrl.slice(0, dataUrl.indexOf(",")).includes("base64")) return payload.length;
+    const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+    return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
 }
 
 function drawResizeCanvas(source: CanvasImageSource, sourceWidth: number, sourceHeight: number, width: number, height: number, algorithm: ImageUpscaleAlgorithm) {

@@ -19,7 +19,7 @@ import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useThemeStore } from "@/stores/use-theme-store";
-import { cropDataUrl, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
+import { cropDataUrl, fitImageDataUrlForRequest, splitDataUrl, upscaleDataUrl } from "../utils/canvas-image-data";
 import { semanticSvgFallback, sanitizeEditableSvg, svgToBlob } from "../utils/canvas-svg-vector";
 import { fitNodeSize, nodeSizeFromRatio } from "../utils/canvas-node-size";
 import { App, Button, Dropdown, Modal } from "antd";
@@ -1638,7 +1638,8 @@ function InfiniteCanvasPage() {
             try {
                 const dataUrl = await imageToDataUrl({ url: node.metadata.content, storageKey: node.metadata.storageKey });
                 if (!dataUrl) throw new Error("图片读取失败，无法转成可编辑");
-                const source = { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || dataUrlMimeType(dataUrl) || "image/png", dataUrl, storageKey: node.metadata.storageKey };
+                const requestDataUrl = await fitImageDataUrlForRequest(dataUrl);
+                const source = { id: node.id, name: `${node.title || node.id}.jpg`, type: dataUrlMimeType(requestDataUrl) || "image/jpeg", dataUrl: requestDataUrl, storageKey: node.metadata.storageKey };
                 const rawSvg = await requestEditableSvgConversion(
                     generationConfig,
                     source,
